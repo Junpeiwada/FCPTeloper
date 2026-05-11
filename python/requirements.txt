@@ -1,0 +1,35 @@
+# FCPTeloper Python バックエンド依存関係
+# 仕様書 §4.1: AISandbox/VideoToText の Whisper + pyannote 実装をバックエンドとして再利用するが、
+# 本プロジェクト独自の venv にインストールする方針 (フェーズ2の設計判断)。
+#
+# バージョン pin の根拠:
+#   - VideoToText/venv (Python 3.12) で実績のある組み合わせをそのまま使う
+#   - pyannote.audio 4.x は llvmlite 0.46 系を要求してホイールビルドが失敗するため 3.4.0 に固定
+#   - Python 3.13 で torch のホイールが無いので setup.sh で python3.12 を強制
+# `pip freeze` 出力ではなく、トップレベル依存だけ列挙して中間依存は pip 解決に委ねる
+
+# Whisper (OpenAI 音声認識) — 言語自動検出を使う
+openai-whisper==20250625
+
+# Pyannote.audio (話者分離) — HF_TOKEN が必要
+pyannote.audio==3.4.0
+
+# PyTorch (CPU/MPS)
+torch==2.2.2
+torchaudio==2.2.2
+
+# Numba/LLVMlite (whisper の依存。pin しないと最新 numba が 3.12 で llvmlite ビルド失敗)
+numba==0.62.1
+llvmlite==0.45.1
+
+# huggingface_hub: 1.x 系で use_auth_token 引数が削除されたが、pyannote.audio 3.4.0 内部の
+# hf_hub_download 呼び出しで未だ use_auth_token を渡している箇所があり、1.x だと話者分離が
+# 起動時に TypeError でクラッシュする。VideoToText/venv で動作実績のある 0.35.x に固定する。
+huggingface_hub==0.35.3
+
+# 環境変数読み込み
+python-dotenv==1.1.1
+
+# その他
+numpy==1.26.4
+scipy==1.16.2

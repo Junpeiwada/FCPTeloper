@@ -18,3 +18,12 @@ tests/samples/*.mp4
 tests/samples/*.mov
 tests/samples/*.MP4
 !tests/samples/.gitkeep
+
+# Python venv とモデル / バイトコード
+python/venv/
+python/models/
+python/__pycache__/
+**/__pycache__/
+
+# Claude Code 関連の一時ファイル
+.claude/

@@ -1,0 +1,36 @@
+{
+  "version": "1.1",
+  "source_video": "/abs/path/to/clip1.mp4",
+  "video_duration_sec": 6.0,
+  "recorded_at": "2025-10-01T11:07:00Z",
+  "recorded_at_source": "mp4_creation_time",
+  "asr_engine": "whisper-large-v3",
+  "asr_engine_version": "20250101",
+  "fps": 30,
+  "created_at": "2026-05-11T10:30:00+09:00",
+  "segments": [
+    {
+      "id": 0,
+      "start": 1.2,
+      "end": 4.5,
+      "text": "こんにちは、今日はテストです。",
+      "language": "ja",
+      "speaker": "SPEAKER_00",
+      "use": true,
+      "telop_text": null,
+      "ai_edited": false
+    },
+    {
+      "id": 1,
+      "start": 4.5,
+      "end": 6.0,
+      "text": "Nice to meet you.",
+      "language": "en",
+      "speaker": "SPEAKER_01",
+      "use": true,
+      "telop_text": null,
+      "ai_edited": false
+    }
+  ],
+  "ai_suggestions": []
+}

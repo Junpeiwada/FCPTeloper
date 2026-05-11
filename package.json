@@ -6,11 +6,14 @@
   "type": "module",
   "scripts": {
     "sdk:smoke": "tsx scripts/sdk-smoke.ts",
+    "transcript:generate": "tsx bin/transcript-generate.ts",
+    "transcript:validate": "tsx bin/transcript-validate.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.87"
+    "@anthropic-ai/claude-agent-sdk": "^0.2.87",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
