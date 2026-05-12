@@ -5,8 +5,11 @@ out/
 *.log
 ~/Library/Logs/FCPTeloper/
 
-# Electron Forge
+# Electron Forge / Vite
 .vite/
+.webpack/
+*.tsbuildinfo
+.eslintcache
 
 # Local env
 .env

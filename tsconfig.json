@@ -12,11 +12,22 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
     "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
     "types": ["node", "vitest/globals"],
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": "./"
   },
-  "include": ["src/**/*", "scripts/**/*", "bin/**/*", "tests/**/*.ts"],
+  "include": [
+    "src/**/*",
+    "scripts/**/*",
+    "bin/**/*",
+    "tests/**/*.ts",
+    "forge.env.d.ts",
+    "forge.config.ts",
+    "vite.main.config.ts",
+    "vite.preload.config.ts",
+    "vite.renderer.config.ts"
+  ],
   "exclude": ["node_modules", "dist", "out"]
 }

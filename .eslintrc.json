@@ -1,0 +1,45 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "ecmaFeatures": { "jsx": true }
+  },
+  "plugins": ["@typescript-eslint", "import"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-var-requires": "off"
+  },
+  "ignorePatterns": [
+    "dist/",
+    "out/",
+    ".vite/",
+    "node_modules/",
+    "package-lock.json"
+  ],
+  "env": {
+    "node": true,
+    "browser": true,
+    "es2022": true
+  },
+  "overrides": [
+    {
+      "files": ["src/main/**/*.ts", "src/main.ts", "src/preload.ts", "scripts/**/*.ts", "bin/**/*.ts"],
+      "env": { "browser": false, "node": true }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "env": { "node": true }
+    }
+  ],
+  "globals": {
+    "MAIN_WINDOW_VITE_DEV_SERVER_URL": "readonly",
+    "MAIN_WINDOW_VITE_NAME": "readonly"
+  }
+}

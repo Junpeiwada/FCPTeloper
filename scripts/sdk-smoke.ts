@@ -18,6 +18,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeRateLimitError, isLimitErrorText } from "../src/shared/errors.js";
+import { logger } from "../src/main/log.js";
 
 async function main(): Promise<void> {
   const userPrompt = process.argv.slice(2).join(" ").trim();
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   process.stderr.write(
     `[sdk-smoke] sending prompt (chars=${userPrompt.length}) via Max枠 OAuth...\n`,
   );
+  logger.info("sdk-smoke", "request_start", { prompt_len: userPrompt.length });
 
   const stream = query({
     prompt: userPrompt,
@@ -59,6 +61,7 @@ async function main(): Promise<void> {
       sessionId = (msg as { session_id?: string }).session_id ?? null;
       if (sessionId) {
         process.stderr.write(`[sdk-smoke] session_id=${sessionId}\n`);
+        logger.info("sdk-smoke", "session_init", { session_id: sessionId });
       }
     }
 
@@ -83,6 +86,9 @@ async function main(): Promise<void> {
   if (isLimitErrorText(resultText)) {
     throw new ClaudeRateLimitError(resultText.trim());
   }
+
+  // 本文はログに残さず長さのみ記録 (redactPii の挙動にも二重防御で頼る)
+  logger.info("sdk-smoke", "request_done", { text_len: resultText.length });
 
   process.stdout.write(resultText);
   if (!resultText.endsWith("\n")) process.stdout.write("\n");

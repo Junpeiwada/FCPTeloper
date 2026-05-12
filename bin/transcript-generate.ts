@@ -53,10 +53,8 @@ function parseArgs(argv: string[]): Args {
     }
   }
 
-  if (!videoPath || !outputPath) {
-    printUsageAndExit(64);
-  }
-  return { videoPath: videoPath!, outputPath: outputPath!, model, keepAudio };
+  if (!videoPath || !outputPath) printUsageAndExit(64);
+  return { videoPath, outputPath, model, keepAudio };
 }
 
 function printUsageAndExit(code: number): never {
