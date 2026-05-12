@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FCPXML テンプレート (人間向けの参考用)
+
+  実行時テンプレートは src/main/fcpxml_write.ts 内の TEMPLATE 定数に
+  TS 文字列リテラルとして埋め込まれている。本ファイルはビルドに含めず、
+  仕様確認・FCP 取り込み比較のための「読みやすい雛形」としてだけ残す。
+  実装変更時は本ファイルも追従させること。
+-->
+<fcpxml version="1.11">
+  <resources>
+    <format id="r0" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
+    <effect id="r_title" name="Basic Title" uid=".../Titles.localized/Build In_Out.localized/Basic Title.localized/Basic Title.moti"/>
+    <text-style-def id="ts1">
+      <text-style font="Hiragino Sans W6" fontSize="60" fontColor="1 1 1 1" strokeColor="0 0 0 1" strokeWidth="4"/>
+    </text-style-def>
+    <!-- ここに <asset id="r_asset_N" .../> を動画ごとに 1 つずつ追加する -->
+  </resources>
+  <library>
+    <event name="FCPTeloper">
+      <project name="FCPTeloper">
+        <sequence format="r0" duration="0s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+            <!-- ここに use:true セグメントごとの <asset-clip>...<title/>...</asset-clip> を並べる -->
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>

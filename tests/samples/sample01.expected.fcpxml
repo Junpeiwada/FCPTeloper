@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fcpxml version="1.11">
+  <resources>
+    <format id="r0" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
+    <effect id="r_title" name="Basic Title" uid=".../Titles.localized/Build In_Out.localized/Basic Title.localized/Basic Title.moti"/>
+    <text-style-def id="ts1">
+      <text-style font="Hiragino Sans W6" fontSize="60" fontColor="1 1 1 1" strokeColor="0 0 0 1" strokeWidth="4"/>
+    </text-style-def>
+    <asset id="r_asset_1" name="sample01.mp4" src="file:///abs/path/to/sample01.mp4" start="0s" duration="300/30s" hasVideo="1" hasAudio="1"/>
+  </resources>
+  <library>
+    <event name="FCPTeloper">
+      <project name="FCPTeloper">
+        <sequence format="r0" duration="225/30s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+            <asset-clip ref="r_asset_1" name="sample01.mp4 #0" offset="0s" start="0s" duration="60/30s">
+              <title ref="r_title" lane="1" offset="0s" duration="60/30s" name="Telop">
+                <text>
+                  <text-style ref="ts1">こんにちは</text-style>
+                </text>
+              </title>
+            </asset-clip>
+            <asset-clip ref="r_asset_1" name="sample01.mp4 #2" offset="60/30s" start="105/30s" duration="75/30s">
+              <title ref="r_title" lane="1" offset="60/30s" duration="75/30s" name="Telop">
+                <text>
+                  <text-style ref="ts1">Nice to meet you.</text-style>
+                </text>
+              </title>
+            </asset-clip>
+            <asset-clip ref="r_asset_1" name="sample01.mp4 #3" offset="135/30s" start="180/30s" duration="90/30s">
+              <title ref="r_title" lane="1" offset="135/30s" duration="90/30s" name="Telop">
+                <text>
+                  <text-style ref="ts1">よろしく &amp; お願いします</text-style>
+                </text>
+              </title>
+            </asset-clip>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>

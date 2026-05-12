@@ -19,6 +19,9 @@
     "sdk:smoke": "tsx scripts/sdk-smoke.ts",
     "transcript:generate": "tsx bin/transcript-generate.ts",
     "transcript:validate": "tsx bin/transcript-validate.ts",
+    "video:probe": "tsx bin/video-probe.ts",
+    "fcpxml:build": "tsx bin/fcpxml-build.ts",
+    "fcpxml:diff": "tsx scripts/diff-fcpxml.ts",
     "logs:tail": "tsx bin/logs-tail.ts",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -26,6 +29,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.87",
     "electron-squirrel-startup": "^1.0.1",
+    "fast-xml-parser": "^5.7.3",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zod": "^4.0.0"

@@ -1,0 +1,58 @@
+{
+  "version": "1.1",
+  "source_video": "/abs/path/to/sample01.mp4",
+  "video_duration_sec": 10.0,
+  "recorded_at": "2025-10-01T11:07:00Z",
+  "recorded_at_source": "mp4_creation_time",
+  "asr_engine": "whisper-large-v3",
+  "asr_engine_version": "20250101",
+  "fps": 30,
+  "created_at": "2026-05-12T10:00:00+09:00",
+  "segments": [
+    {
+      "id": 0,
+      "start": 0.0,
+      "end": 2.0,
+      "text": "こんにちは、テストです。",
+      "language": "ja",
+      "speaker": "SPEAKER_00",
+      "use": true,
+      "telop_text": "こんにちは",
+      "ai_edited": true
+    },
+    {
+      "id": 1,
+      "start": 2.0,
+      "end": 3.5,
+      "text": "えーと、その、",
+      "language": "ja",
+      "speaker": "SPEAKER_00",
+      "use": false,
+      "telop_text": null,
+      "ai_edited": false
+    },
+    {
+      "id": 2,
+      "start": 3.5,
+      "end": 6.0,
+      "text": "Nice to meet you.",
+      "language": "en",
+      "speaker": "SPEAKER_01",
+      "use": true,
+      "telop_text": null,
+      "ai_edited": false
+    },
+    {
+      "id": 3,
+      "start": 6.0,
+      "end": 9.0,
+      "text": "本日はよろしくお願いします。",
+      "language": "ja",
+      "speaker": "SPEAKER_00",
+      "use": true,
+      "telop_text": "よろしく & お願いします",
+      "ai_edited": true
+    }
+  ],
+  "ai_suggestions": []
+}
