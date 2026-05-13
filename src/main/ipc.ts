@@ -345,7 +345,8 @@ export function registerIpcHandlers(
           transcript = v.value;
         }
 
-        // transcript があればそれが「正しい」メタ情報を持つので使う。無ければ ffprobe で補う。
+        // width/height/timecode は常に ffprobe から取得する（transcript にはこの情報がない）
+        const probed = probeVideo(videoPath);
         if (transcript) {
           return {
             videoPath,
@@ -353,15 +354,20 @@ export function registerIpcHandlers(
             fps: transcript.fps,
             recordedAt: transcript.recorded_at,
             transcript,
+            width: probed.width,
+            height: probed.height,
+            timecode: probed.timecode,
           };
         }
-        const probed = probeVideo(videoPath);
         return {
           videoPath,
           videoDurationSec: probed.video_duration_sec,
           fps: probed.fps,
           recordedAt: probed.creation_time,
           transcript: null,
+          width: probed.width,
+          height: probed.height,
+          timecode: probed.timecode,
         };
       });
 

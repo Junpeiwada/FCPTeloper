@@ -90,11 +90,12 @@ describe("buildFcpxml", () => {
     expect(xml).toContain("よろしく &amp; お願いします");
   });
 
-  it("<asset> はシーケンスと同じ format=\"r0\" を持つ (FCP の素材解決のため)", () => {
+  it("<asset> と <asset-clip> はともに format=\"r0\" を持つ (FCP の素材解決のため)", () => {
     const xml = buildFcpxmlFromTranscripts([loadSample()]);
     expect(xml).toMatch(/<asset [^>]*\bformat="r0"/);
-    // <asset-clip> 側の format 属性は付けない (シーケンスから継承する形)
-    expect(xml).not.toMatch(/<asset-clip [^>]*\bformat="/);
+    // FCP は asset-clip にも format と tcFormat を必要とする (実機エクスポートに準拠)
+    expect(xml).toMatch(/<asset-clip [^>]*\bformat="r0"/);
+    expect(xml).toMatch(/<asset-clip [^>]*\btcFormat="NDF"/);
   });
 
   it("<text-style-def> は最初の <title> 内に 1 度だけ定義される (DTD 適合)", () => {
@@ -158,7 +159,7 @@ describe("buildFcpxml", () => {
     t.fps = 60000 / 1001;
     const xml = buildFcpxmlFromTranscripts([t]);
     expect(xml).toContain('frameDuration="1001/60000s"');
-    expect(xml).toContain('name="FFVideoFormat1080p5994"');
+    expect(xml).toContain('name="FFVideoFormat1920x1080p5994"');
     expect(xml).toMatch(/duration="\d+\/60000s"/);
     expect(xml).not.toMatch(/\b\d+\/60s"/);
   });
@@ -168,7 +169,7 @@ describe("buildFcpxml", () => {
     t.fps = 30000 / 1001;
     const xml = buildFcpxmlFromTranscripts([t]);
     expect(xml).toContain('frameDuration="1001/30000s"');
-    expect(xml).toContain('name="FFVideoFormat1080p2997"');
+    expect(xml).toContain('name="FFVideoFormat1920x1080p2997"');
   });
 
   it("動画間で fps が異なるとエラー", () => {

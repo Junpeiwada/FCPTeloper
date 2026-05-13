@@ -22,6 +22,12 @@ export interface FFprobeResult {
   fps: number;
   /** ISO8601 文字列 or null */
   creation_time: string | null;
+  /** 映像の横ピクセル数 */
+  width: number;
+  /** 映像の縦ピクセル数 */
+  height: number;
+  /** 埋め込みタイムコード "HH:MM:SS:FF" or null (GoPro 等の GPS タイムコード) */
+  timecode: string | null;
 }
 
 export interface FFprobeOptions {
@@ -87,11 +93,18 @@ export function probeVideo(
   const creation =
     stream.tags?.creation_time ?? json.format?.tags?.creation_time ?? null;
 
+  const width = stream.width ?? 0;
+  const height = stream.height ?? 0;
+  const timecode = stream.tags?.timecode ?? null;
+
   return {
     source_video: videoPath,
     video_duration_sec: duration,
     fps,
     creation_time: creation,
+    width,
+    height,
+    timecode,
   };
 }
 
@@ -115,7 +128,9 @@ export function parseRational(s: string | undefined): number | null {
 interface FFprobeStream {
   r_frame_rate?: string;
   duration?: string;
-  tags?: { creation_time?: string };
+  width?: number;
+  height?: number;
+  tags?: { creation_time?: string; timecode?: string };
 }
 
 interface FFprobeFormat {

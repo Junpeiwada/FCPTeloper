@@ -46,6 +46,18 @@ vi.mock("./transcribe.js", () => ({
   transcribeVideo: vi.fn(async () => ({ outputPath: "/tmp/dummy.json", exitCode: 0 })),
 }));
 
+// ffprobe は実ファイル不要のモック
+vi.mock("./ffprobe.js", () => ({
+  probeVideo: vi.fn((videoPath: string) => ({
+    source_video: videoPath,
+    video_duration_sec: 10,
+    fps: 30,
+    creation_time: "2026-05-12T10:00:00Z",
+    width: 1920,
+    height: 1080,
+  })),
+}));
+
 import { _resetForTest, registerIpcHandlers } from "./ipc.js";
 import {
   IpcChannels,

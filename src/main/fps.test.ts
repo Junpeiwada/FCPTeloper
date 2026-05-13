@@ -116,19 +116,19 @@ describe("frameDurationString", () => {
 });
 
 describe("defaultFormatName", () => {
-  it("整数 fps: FFVideoFormat1080p30", () => {
-    expect(defaultFormatName(1080, { num: 30, den: 1 })).toBe(
-      "FFVideoFormat1080p30",
+  it("整数 fps: FFVideoFormat1920x1080p30", () => {
+    expect(defaultFormatName(1920, 1080, { num: 30, den: 1 })).toBe(
+      "FFVideoFormat1920x1080p30",
     );
   });
-  it("NTSC 59.94: FFVideoFormat1080p5994", () => {
-    expect(defaultFormatName(1080, { num: 60000, den: 1001 })).toBe(
-      "FFVideoFormat1080p5994",
+  it("NTSC 59.94: FFVideoFormat3840x2160p5994", () => {
+    expect(defaultFormatName(3840, 2160, { num: 60000, den: 1001 })).toBe(
+      "FFVideoFormat3840x2160p5994",
     );
   });
-  it("NTSC 29.97: FFVideoFormat1080p2997", () => {
-    expect(defaultFormatName(1080, { num: 30000, den: 1001 })).toBe(
-      "FFVideoFormat1080p2997",
+  it("NTSC 29.97: FFVideoFormat1920x1080p2997", () => {
+    expect(defaultFormatName(1920, 1080, { num: 30000, den: 1001 })).toBe(
+      "FFVideoFormat1920x1080p2997",
     );
   });
 });

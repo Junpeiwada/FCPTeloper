@@ -173,6 +173,12 @@ export interface BuildFcpxmlInput {
   recordedAt: string | null;
   /** 対応 transcript (任意)。あれば use:true セグメントだけテロップ化する */
   transcript: Transcript | null;
+  /** 映像の横ピクセル数 (省略時は options.width → 1920 のフォールバック) */
+  width?: number;
+  /** 映像の縦ピクセル数 (省略時は options.height → 1080 のフォールバック) */
+  height?: number;
+  /** 埋め込みタイムコード "HH:MM:SS:FF" (GoPro 等)。asset.start と asset-clip.start に使う */
+  timecode?: string | null;
 }
 
 /**
@@ -196,10 +202,11 @@ export function buildFcpxml(
     }
   }
 
-  const width = options.width ?? 1920;
-  const height = options.height ?? 1080;
+  // 解像度は inputs[0] の実測値を優先し、options > デフォルト (1920×1080) にフォールバック
+  const width = options.width ?? inputs[0].width ?? 1920;
+  const height = options.height ?? inputs[0].height ?? 1080;
   const projectName = options.projectName ?? "FCPTeloper";
-  const formatName = options.formatName ?? defaultFormatName(height, fps);
+  const formatName = options.formatName ?? defaultFormatName(width, height, fps);
 
   const sorted = sortBuildInputs(inputs);
 
@@ -268,6 +275,7 @@ export function buildFcpxml(
         durationFrames: clipDurF,
         fps,
         titles,
+        timecode: item.timecode,
       }),
     );
     cursorFrames += clipDurF;
@@ -286,6 +294,7 @@ export function buildFcpxml(
         src: item.videoPath,
         durationFrames: durF,
         fps,
+        timecode: item.timecode,
       }),
     );
   }
@@ -322,6 +331,28 @@ export function buildFcpxmlFromTranscripts(
 }
 
 /* ------------------------------ helpers ------------------------------ */
+
+/**
+ * "HH:MM:SS:FF" 形式の NDF タイムコードを FCPXML 時間文字列に変換する。
+ * GoPro 等の GPS タイムコードに対応。
+ * 書式エラーや fps が 0 の場合は null を返す (呼び出し側は "0s" にフォールバック)。
+ */
+export function timecodeToFcpTime(
+  tc: string,
+  fps: FpsRational,
+): string | null {
+  const m = /^(\d+):(\d{2}):(\d{2})[:;](\d+)$/.exec(tc);
+  if (!m) return null;
+  const hh = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  const ss = parseInt(m[3], 10);
+  const ff = parseInt(m[4], 10);
+  const totalSeconds = hh * 3600 + mm * 60 + ss;
+  // 有理数で正確に計算: (seconds * num + FF * den) / num
+  const numerator = totalSeconds * fps.num + ff * fps.den;
+  if (numerator === 0) return "0s";
+  return `${numerator}/${fps.num}s`;
+}
 
 /**
  * BuildFcpxmlInput[] を recorded_at 昇順 (フォールバックは videoPath の basename) で並べる。
@@ -384,6 +415,8 @@ interface AssetParams {
   src: string;
   durationFrames: number;
   fps: FpsRational;
+  /** "HH:MM:SS:FF" 形式の埋め込みタイムコード (GoPro 等)。省略時は "0s" */
+  timecode?: string | null;
 }
 
 function renderAsset(p: AssetParams): string {
@@ -394,12 +427,10 @@ function renderAsset(p: AssetParams): string {
   }
   const fileUrl = pathToFileUrl(p.src);
   const dur = framesToFcpTimeRational(p.durationFrames, p.fps);
-  // FCPXML DTD: <asset> の src は子要素 <media-rep> に持たせる必要がある。
-  // FCP が「対応するメディアがない不正な編集」を出さないよう、シーケンスと同じ
-  // format ID をひも付けて素材のフォーマットを明示する。
-  // audioSources/audioChannels/audioRate は実機エクスポートに準じた既定値。
+  const start =
+    (p.timecode && timecodeToFcpTime(p.timecode, p.fps)) ?? "0s";
   return [
-    `<asset id="${p.id}" name="${xmlEscape(p.name)}" start="0s" duration="${dur}" format="r0" hasVideo="1" hasAudio="1" videoSources="1" audioSources="1" audioChannels="2" audioRate="48000">`,
+    `<asset id="${p.id}" name="${xmlEscape(p.name)}" start="${start}" duration="${dur}" format="r0" hasVideo="1" hasAudio="1" videoSources="1" audioSources="1" audioChannels="2" audioRate="48000">`,
     `      <media-rep kind="original-media" src="${xmlEscape(fileUrl)}"/>`,
     `    </asset>`,
   ].join("\n");
@@ -413,18 +444,22 @@ interface AssetClipParams {
   fps: FpsRational;
   /** この <asset-clip> 配下に乗せる <title> 文字列 (0 件可) */
   titles: string[];
+  /** "HH:MM:SS:FF" 形式の埋め込みタイムコード (GoPro 等)。asset.start と合わせる必要がある */
+  timecode?: string | null;
 }
 
 function renderAssetClip(p: AssetClipParams): string {
   const offset = framesToFcpTimeRational(p.offsetFrames, p.fps);
   const dur = framesToFcpTimeRational(p.durationFrames, p.fps);
-  // start="0s" 固定: 動画はフル尺で配置するため、ブレード分割は発生しない。
+  // start は asset.start と一致させる。タイムコードがある場合はそれを使う。
+  const start =
+    (p.timecode && timecodeToFcpTime(p.timecode, p.fps)) ?? "0s";
   const titlesBlock =
     p.titles.length > 0
       ? "\n              " + p.titles.join("\n              ")
       : "";
   return [
-    `<asset-clip ref="${p.assetId}" name="${xmlEscape(p.name)}" offset="${offset}" start="0s" duration="${dur}">${titlesBlock}`,
+    `<asset-clip ref="${p.assetId}" name="${xmlEscape(p.name)}" offset="${offset}" start="${start}" duration="${dur}" format="r0" tcFormat="NDF">${titlesBlock}`,
     `            </asset-clip>`,
   ].join("\n");
 }

@@ -92,10 +92,10 @@ export function frameDurationString(fps: FpsRational): string {
 }
 
 /**
- * FCP 既定の <format> 名 (例: "FFVideoFormat1080p30", "FFVideoFormat1080p5994")。
- * NTSC fps は小数点抜きの「2997 / 5994」表記、整数 fps はそのまま数値。
+ * FCP 既定の <format> 名 (例: "FFVideoFormat3840x2160p5994", "FFVideoFormat1920x1080p30")。
+ * FCP は 4K 以上で "WIDTHxHEIGHTp..." 形式を使う。width を渡すことで正確な名前を生成する。
  */
-export function defaultFormatName(height: number, fps: FpsRational): string {
+export function defaultFormatName(width: number, height: number, fps: FpsRational): string {
   let fpsLabel: string;
   if (fps.den === 1) {
     fpsLabel = String(fps.num);
@@ -107,5 +107,5 @@ export function defaultFormatName(height: number, fps: FpsRational): string {
     // normalizeFps 経由で来る値はこのいずれかに限られるが、防御的に
     fpsLabel = `${fps.num}_${fps.den}`;
   }
-  return `FFVideoFormat${height}p${fpsLabel}`;
+  return `FFVideoFormat${width}x${height}p${fpsLabel}`;
 }
