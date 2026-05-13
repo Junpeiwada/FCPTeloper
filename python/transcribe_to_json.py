@@ -327,7 +327,9 @@ def build_transcript_json(
                 "language": lang,
                 "speaker": speaker,
                 "use": True,
-                "telop_text": None,
+                # telop_text のデフォルトは ASR 結果 (text) のコピー。
+                # ユーザーが UI で書き換えた場合のみ差分が出る。
+                "telop_text": text,
                 "ai_edited": False,
             }
         )

@@ -1,34 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <fcpxml version="1.11">
   <resources>
-    <format id="r0" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="1-1-1 (Rec. 709)"/>
-    <effect id="r_title" name="Basic Title" uid=".../Titles.localized/Build In_Out.localized/Basic Title.localized/Basic Title.moti"/>
-    <text-style-def id="ts1">
-      <text-style font="Hiragino Sans W6" fontSize="60" fontColor="1 1 1 1" strokeColor="0 0 0 1" strokeWidth="4"/>
-    </text-style-def>
-    <asset id="r_asset_1" name="sample01.mp4" src="file:///abs/path/to/sample01.mp4" start="0s" duration="300/30s" hasVideo="1" hasAudio="1"/>
+    <format id="r0" name="FFVideoFormat1080p30" frameDuration="1/30s" width="1920" height="1080" colorSpace="9-18-9 (Rec. 2020 HLG)"/>
+    <effect id="r_title" name="基本タイトル" uid=".../Titles.localized/Bumper:Opener.localized/Basic Title.localized/Basic Title.moti"/>
+    <asset id="r_asset_1" name="sample01.mp4" start="0s" duration="300/30s" format="r0" hasVideo="1" hasAudio="1" videoSources="1" audioSources="1" audioChannels="2" audioRate="48000">
+      <media-rep kind="original-media" src="file:///abs/path/to/sample01.mp4"/>
+    </asset>
   </resources>
-  <library>
+  <library colorProcessing="wide-hdr">
     <event name="FCPTeloper">
       <project name="FCPTeloper">
-        <sequence format="r0" duration="225/30s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+        <sequence format="r0" duration="300/30s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
           <spine>
-            <asset-clip ref="r_asset_1" name="sample01.mp4 #0" offset="0s" start="0s" duration="60/30s">
+            <asset-clip ref="r_asset_1" name="sample01.mp4" offset="0s" start="0s" duration="300/30s">
               <title ref="r_title" lane="1" offset="0s" duration="60/30s" name="Telop">
+                <param name="位置" key="9999/999166631/999166633/1/100/101" value="0 -388"/>
+                <param name="平坦化" key="9999/999166631/999166633/2/351" value="1"/>
+                <param name="配置" key="9999/999166631/999166633/2/354/999169573/401" value="1 (水平方向に中央揃え)"/>
+                <param name="サイズ" key="9999/999166631/999166633/5/999166635/3" value="100"/>
+                <param name="カラー" key="9999/999166631/999166633/5/999166635/30/32" value="0 0 0"/>
+                <param name="ラップモード" key="9999/999166631/999166633/5/999166635/30/34/5" value="1 (繰り返し)"/>
+                <param name="フォント" key="9999/999166631/999166633/5/999166635/83" value="119 4"/>
                 <text>
                   <text-style ref="ts1">こんにちは</text-style>
                 </text>
+                <text-style-def id="ts1">
+                  <text-style font="Helvetica" fontSize="100" fontColor="1 1 1 1" bold="1" strokeColor="0 0 0 1" strokeWidth="-1" alignment="center"/>
+                </text-style-def>
               </title>
-            </asset-clip>
-            <asset-clip ref="r_asset_1" name="sample01.mp4 #2" offset="60/30s" start="105/30s" duration="75/30s">
-              <title ref="r_title" lane="1" offset="60/30s" duration="75/30s" name="Telop">
+              <title ref="r_title" lane="1" offset="105/30s" duration="75/30s" name="Telop">
+                <param name="位置" key="9999/999166631/999166633/1/100/101" value="0 -388"/>
+                <param name="平坦化" key="9999/999166631/999166633/2/351" value="1"/>
+                <param name="配置" key="9999/999166631/999166633/2/354/999169573/401" value="1 (水平方向に中央揃え)"/>
+                <param name="サイズ" key="9999/999166631/999166633/5/999166635/3" value="100"/>
+                <param name="カラー" key="9999/999166631/999166633/5/999166635/30/32" value="0 0 0"/>
+                <param name="ラップモード" key="9999/999166631/999166633/5/999166635/30/34/5" value="1 (繰り返し)"/>
+                <param name="フォント" key="9999/999166631/999166633/5/999166635/83" value="119 4"/>
                 <text>
                   <text-style ref="ts1">Nice to meet you.</text-style>
                 </text>
               </title>
-            </asset-clip>
-            <asset-clip ref="r_asset_1" name="sample01.mp4 #3" offset="135/30s" start="180/30s" duration="90/30s">
-              <title ref="r_title" lane="1" offset="135/30s" duration="90/30s" name="Telop">
+              <title ref="r_title" lane="1" offset="180/30s" duration="90/30s" name="Telop">
+                <param name="位置" key="9999/999166631/999166633/1/100/101" value="0 -388"/>
+                <param name="平坦化" key="9999/999166631/999166633/2/351" value="1"/>
+                <param name="配置" key="9999/999166631/999166633/2/354/999169573/401" value="1 (水平方向に中央揃え)"/>
+                <param name="サイズ" key="9999/999166631/999166633/5/999166635/3" value="100"/>
+                <param name="カラー" key="9999/999166631/999166633/5/999166635/30/32" value="0 0 0"/>
+                <param name="ラップモード" key="9999/999166631/999166633/5/999166635/30/34/5" value="1 (繰り返し)"/>
+                <param name="フォント" key="9999/999166631/999166633/5/999166635/83" value="119 4"/>
                 <text>
                   <text-style ref="ts1">よろしく &amp; お願いします</text-style>
                 </text>

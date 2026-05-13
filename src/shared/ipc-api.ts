@@ -67,9 +67,21 @@ export interface TranscribeProgressEvent {
   stream: "stdout" | "stderr";
 }
 
+/**
+ * FCPXML 生成 1 動画分の入力。
+ * transcript が無い動画もタイムラインに並べたいので、videoPath を必須にし
+ * transcriptPath は任意とする。
+ */
+export interface FcpxmlBuildItem {
+  /** 動画ファイルの絶対パス (必須) */
+  videoPath: string;
+  /** 対応 transcript.json の絶対パス。存在しないなら省略 (テロップなしで配置) */
+  transcriptPath?: string;
+}
+
 export interface FcpxmlBuildPayload {
-  /** transcript.json の絶対パスリスト */
-  transcriptPaths: string[];
+  /** タイムラインに並べる動画のリスト (チェック ON の動画すべて) */
+  items: FcpxmlBuildItem[];
   /** 出力 FCPXML の絶対パス */
   outputPath: string;
   projectName?: string;

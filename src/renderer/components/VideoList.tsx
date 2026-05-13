@@ -123,6 +123,9 @@ export default function VideoList({
                 primary={name}
                 slotProps={{
                   primary: { noWrap: true, sx: { fontSize: 12 } },
+                  // ListItemText の secondary は既定で <p> でラップされるため、
+                  // 中に <Chip> (div) を置くと DOM nesting 違反になる。<span> に変更。
+                  secondary: { component: "span" },
                 }}
                 secondary={
                   v.hasTranscript ? (

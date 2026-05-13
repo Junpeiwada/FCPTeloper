@@ -18,7 +18,8 @@ import { extname, isAbsolute, join, resolve } from "node:path";
 
 import { logger } from "./log.js";
 import { transcribeVideo } from "./transcribe.js";
-import { buildFcpxml } from "./fcpxml_write.js";
+import { buildFcpxml, type BuildFcpxmlInput } from "./fcpxml_write.js";
+import { probeVideo } from "./ffprobe.js";
 import { allowFolder } from "./media-allowlist.js";
 import {
   loadSettings,
@@ -287,42 +288,89 @@ export function registerIpcHandlers(
   );
 
   // ---- fcpxml:build ----
+  // チェック済み動画リスト (transcript 任意) を受けて FCPXML を生成する。
+  // 動画は 1 本 = 1 <asset-clip> 全長で配置し、transcript があれば use:true セグメントを
+  // lane=1 の <title> として重ねる。transcript が無い動画は ffprobe でメタ情報を補う。
   ipcMain.handle(
     IpcChannels.fcpxmlBuild,
     async (_event, payload: unknown): Promise<FcpxmlBuildResult> => {
       const p = payload as Partial<FcpxmlBuildPayload> | null;
-      if (
-        !p ||
-        !Array.isArray(p.transcriptPaths) ||
-        p.transcriptPaths.length === 0
-      ) {
-        throw new Error("fcpxml:build: transcriptPaths must be a non-empty array");
+      if (!p || !Array.isArray(p.items) || p.items.length === 0) {
+        throw new Error("fcpxml:build: items must be a non-empty array");
       }
       if (typeof p.outputPath !== "string" || !isAbsolute(p.outputPath)) {
         throw new Error("fcpxml:build: outputPath must be absolute");
       }
-      const transcripts: Transcript[] = p.transcriptPaths.map((tp) => {
-        if (typeof tp !== "string" || !isAbsolute(tp)) {
-          throw new Error(`fcpxml:build: transcript path must be absolute: ${tp}`);
+
+      const inputs: BuildFcpxmlInput[] = p.items.map((item, idx) => {
+        if (!item || typeof item !== "object") {
+          throw new Error(`fcpxml:build: items[${idx}] must be an object`);
         }
-        const raw = readFileSync(tp, "utf-8");
-        const json = JSON.parse(raw);
-        const v = validateTranscript(json);
-        if (!v.ok) {
+        const it = item as {
+          videoPath?: unknown;
+          transcriptPath?: unknown;
+        };
+        if (
+          typeof it.videoPath !== "string" ||
+          !isAbsolute(it.videoPath)
+        ) {
           throw new Error(
-            `fcpxml:build: schema violation in ${tp}: ${v.error.issues
-              .slice(0, 3)
-              .map((i) => `${i.path.join(".")}: ${i.message}`)
-              .join("; ")}`,
+            `fcpxml:build: items[${idx}].videoPath must be absolute: ${String(
+              it.videoPath,
+            )}`,
           );
         }
-        return v.value;
+        const videoPath = it.videoPath;
+
+        // 対応する transcript があれば読み込む
+        let transcript: Transcript | null = null;
+        const tp = it.transcriptPath;
+        if (typeof tp === "string" && tp.length > 0) {
+          if (!isAbsolute(tp)) {
+            throw new Error(
+              `fcpxml:build: items[${idx}].transcriptPath must be absolute: ${tp}`,
+            );
+          }
+          const raw = readFileSync(tp, "utf-8");
+          const json = JSON.parse(raw);
+          const v = validateTranscript(json);
+          if (!v.ok) {
+            throw new Error(
+              `fcpxml:build: schema violation in ${tp}: ${v.error.issues
+                .slice(0, 3)
+                .map((i) => `${i.path.join(".")}: ${i.message}`)
+                .join("; ")}`,
+            );
+          }
+          transcript = v.value;
+        }
+
+        // transcript があればそれが「正しい」メタ情報を持つので使う。無ければ ffprobe で補う。
+        if (transcript) {
+          return {
+            videoPath,
+            videoDurationSec: transcript.video_duration_sec,
+            fps: transcript.fps,
+            recordedAt: transcript.recorded_at,
+            transcript,
+          };
+        }
+        const probed = probeVideo(videoPath);
+        return {
+          videoPath,
+          videoDurationSec: probed.video_duration_sec,
+          fps: probed.fps,
+          recordedAt: probed.creation_time,
+          transcript: null,
+        };
       });
-      const xml = buildFcpxml(transcripts, { projectName: p.projectName });
+
+      const xml = buildFcpxml(inputs, { projectName: p.projectName });
       writeFileSync(p.outputPath, xml, "utf-8");
       logger.info("ipc", "fcpxml_built", {
         outputPath: p.outputPath,
-        inputs: transcripts.length,
+        inputs: inputs.length,
+        withTranscript: inputs.filter((i) => i.transcript !== null).length,
       });
       return { outputPath: p.outputPath };
     },

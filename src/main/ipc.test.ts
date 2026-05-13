@@ -208,30 +208,34 @@ describe("fcpxml:build", () => {
   it("rejects relative output paths", async () => {
     await expect(
       call(IpcChannels.fcpxmlBuild, {
-        transcriptPaths: ["/tmp/x.transcript.json"],
+        items: [
+          {
+            videoPath: "/tmp/x.mp4",
+            transcriptPath: "/tmp/x.transcript.json",
+          },
+        ],
         outputPath: "relative.fcpxml",
       }),
     ).rejects.toThrow(/absolute/);
   });
 
-  it("rejects empty transcript list", async () => {
+  it("rejects empty items list", async () => {
     await expect(
       call(IpcChannels.fcpxmlBuild, {
-        transcriptPaths: [],
+        items: [],
         outputPath: "/tmp/out.fcpxml",
       }),
     ).rejects.toThrow(/non-empty/);
   });
 
   it("builds fcpxml end-to-end from a valid transcript", async () => {
-    const transcript = makeTranscript({
-      source_video: join(tempDir, "video.mp4"),
-    });
+    const videoPath = join(tempDir, "video.mp4");
+    const transcript = makeTranscript({ source_video: videoPath });
     const transcriptPath = join(tempDir, "v.transcript.json");
     writeFileSync(transcriptPath, JSON.stringify(transcript));
     const outputPath = join(tempDir, "out.fcpxml");
     const r = await call<FcpxmlBuildResult>(IpcChannels.fcpxmlBuild, {
-      transcriptPaths: [transcriptPath],
+      items: [{ videoPath, transcriptPath }],
       outputPath,
     });
     expect(r.outputPath).toBe(outputPath);

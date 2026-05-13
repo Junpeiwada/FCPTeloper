@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import { validateTranscript } from "../src/shared/transcript-schema.js";
-import { buildFcpxml } from "../src/main/fcpxml_write.js";
+import { buildFcpxmlFromTranscripts } from "../src/main/fcpxml_write.js";
 import { logger } from "../src/main/log.js";
 
 interface ParsedArgs {
@@ -115,7 +115,7 @@ function main(): void {
 
   let xml: string;
   try {
-    xml = buildFcpxml(transcripts, { projectName: args.projectName });
+    xml = buildFcpxmlFromTranscripts(transcripts, { projectName: args.projectName });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     fatal("build_failed", msg);

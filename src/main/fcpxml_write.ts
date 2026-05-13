@@ -24,8 +24,17 @@ import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { Transcript, Segment } from "../shared/transcript-schema.js";
-import { ensureIntegerFps, secondsToFrames } from "./fps.js";
-import { sortTranscripts } from "./sort.js";
+import {
+  defaultFormatName,
+  fpsEquals,
+  frameDurationString,
+  framesToFcpTime as framesToFcpTimeRational,
+  normalizeFps,
+  secondsToFrames,
+  type FpsRational,
+} from "./fps.js";
+import { compareSortKey, parseIso8601 } from "./sort.js";
+import { basename } from "node:path";
 
 export interface BuildFcpxmlOptions {
   /** 出力プロジェクト名 (event/project の name に使う) */
@@ -40,88 +49,241 @@ export interface BuildFcpxmlOptions {
 const STYLE_ID = "ts1";
 
 /**
- * Transcript[] (1 つ以上) から FCPXML 文字列を生成する。
- * 入力は recorded_at 昇順 (フォールバックはファイル名) で並べ替えてから処理する。
+ * テロップ文字スタイル定義。
+ *
+ * ここを書き換えるだけで生成される FCPXML 内の `<text-style>` 属性が変わる。
+ * 値が空文字列 / null / undefined の項目は属性自体を出力しないので、無効化したい場合は
+ * その項目を消す or 空にすればよい。
+ *
+ * 主な属性 (FCPXML <text-style> 仕様):
+ *   font           フォント名 (例: "Hiragino Sans W6", "Helvetica Neue")
+ *   fontSize       文字サイズ (px 換算ではなく FCP 内部単位; 60 で 1080p に対し中程度)
+ *   fontColor      "R G B A" (0..1)。例: "1 1 1 1" は白、"1 1 0 1" は黄
+ *   bold           "1" で太字
+ *   italic         "1" でイタリック
+ *   underline      "1" で下線
+ *   strokeColor    アウトライン (枠) の色。空にすると枠なし
+ *   strokeWidth    アウトラインの太さ (0 で枠なし)
+ *   alignment      "left" / "center" / "right"
+ *   lineSpacing    行間 (整数)
+ *   shadowColor    影の色 "R G B A"
+ *   shadowOffset   "<距離> <角度°>"
+ *   shadowBlur     ぼかし量
+ *
+ * 一覧にない属性 (背景パネル等) は <text-style> では表現できず、別の Motion テンプレート
+ * (effect uid) への切り替えが必要。
+ */
+export const TELOP_STYLE: Record<string, string> = {
+  // FCP 「基本タイトル (Bumper:Opener > Basic Title)」での実機エクスポート値ベース。
+  // 数値の単位は Motion 内部単位 (1080p 換算で fontSize=60 がおよそ FCP インスペクタ "60pt")。
+  font: "Helvetica",
+  fontSize: "100",
+  fontColor: "1 1 1 1",
+  bold: "1",
+  // italic: "1",
+  // underline: "1",
+  strokeColor: "0 0 0 1",
+  // strokeWidth: マイナス値で「内側にアウトライン (face をはみ出さない)」
+  // 正値で外側、0 / 削除でアウトラインなし。
+  strokeWidth: "-1",
+  // shadowColor: "0 0 0 0.75",
+  // shadowOffset: "5 315",
+  // shadowBlur: "8",
+  alignment: "center",
+};
+
+/**
+ * <title> 要素直下に注入する <param> 一覧。
+ * Basic Title テンプレート (Bumper:Opener) の主要パラメータを実機エクスポート値で固定する。
+ *
+ * key は Motion テンプレートが内部的に持つ ID 文字列で、Apple 同梱の Basic Title.moti と
+ * 1:1 対応している。テンプレート (uid) を変えるとこの key 体系も変わるため、テンプレート
+ * 差し替え時にはセットで更新する。
+ *
+ * 主な意味:
+ *   位置        画面上の (X Y) 座標。Y 負値で下寄せ。
+ *   サイズ      テキスト全体の倍率 (100=等倍)
+ *   フォント    Motion 内部のフォント識別子 ("119 4" = Helvetica Regular)
+ *   配置        テキスト揃え (1=水平方向に中央揃え)
+ *   カラー      アウトライン要素のカラー (face 色は <text-style fontColor> で別管理)
+ *   平坦化      "1" でレイヤーをフラット表示
+ *   ラップモード "1" でリピート
+ */
+export const TITLE_PARAMS: ReadonlyArray<{
+  name: string;
+  key: string;
+  value: string;
+}> = [
+  { name: "位置", key: "9999/999166631/999166633/1/100/101", value: "0 -388" },
+  { name: "平坦化", key: "9999/999166631/999166633/2/351", value: "1" },
+  {
+    name: "配置",
+    key: "9999/999166631/999166633/2/354/999169573/401",
+    value: "1 (水平方向に中央揃え)",
+  },
+  {
+    name: "サイズ",
+    key: "9999/999166631/999166633/5/999166635/3",
+    value: "100",
+  },
+  {
+    name: "カラー",
+    key: "9999/999166631/999166633/5/999166635/30/32",
+    value: "0 0 0",
+  },
+  {
+    name: "ラップモード",
+    key: "9999/999166631/999166633/5/999166635/30/34/5",
+    value: "1 (繰り返し)",
+  },
+  {
+    name: "フォント",
+    key: "9999/999166631/999166633/5/999166635/83",
+    value: "119 4",
+  },
+];
+
+function renderTextStyleTag(): string {
+  const attrs = Object.entries(TELOP_STYLE)
+    .filter(([, v]) => v !== "" && v != null)
+    .map(([k, v]) => `${k}="${xmlEscape(String(v))}"`)
+    .join(" ");
+  return `<text-style ${attrs}/>`;
+}
+
+/**
+ * buildFcpxml の入力 1 項目。
+ *
+ * 動画 1 本に対し、対応する transcript があれば渡す。transcript が無い動画も
+ * タイムラインに並べられるよう、videoDurationSec / fps / recordedAt は別途必須にしている。
+ *
+ * 設計意図:
+ *   - チェックされた動画は字幕の有無に関わらず全部 spine に並べたい (要望)
+ *   - 動画は 1 本 = 1 <asset-clip> で配置し、ブレード分割しない
+ *   - テロップ (use:true セグメント) は <asset-clip> 配下 lane=1 の <title> として乗せる
+ */
+export interface BuildFcpxmlInput {
+  /** 動画ファイル絶対パス (DTD `<media-rep src>` に入る) */
+  videoPath: string;
+  /** 動画長さ秒。ffprobe または transcript.video_duration_sec から渡す */
+  videoDurationSec: number;
+  /** 動画の fps (整数 or 29.97 / 59.94) */
+  fps: number;
+  /** 撮影日時。並び順決定に使う。不明なら null (この場合は videoPath 順フォールバック) */
+  recordedAt: string | null;
+  /** 対応 transcript (任意)。あれば use:true セグメントだけテロップ化する */
+  transcript: Transcript | null;
+}
+
+/**
+ * BuildFcpxmlInput[] (1 つ以上) から FCPXML 文字列を生成する。
+ * 入力は recorded_at 昇順 (フォールバックは videoPath) で並べ替えてから処理する。
  */
 export function buildFcpxml(
-  transcripts: Transcript[],
+  inputs: BuildFcpxmlInput[],
   options: BuildFcpxmlOptions = {},
 ): string {
-  if (transcripts.length === 0) {
-    throw new Error("buildFcpxml: transcripts must contain at least one item");
+  if (inputs.length === 0) {
+    throw new Error("buildFcpxml: inputs must contain at least one item");
   }
 
-  const fpsSet = new Set(transcripts.map((t) => t.fps));
-  if (fpsSet.size !== 1) {
-    throw new Error(
-      `buildFcpxml: mixed fps not supported (got ${[...fpsSet].join(", ")})`,
-    );
+  const fpsList = inputs.map((i) => normalizeFps(i.fps));
+  const fps = fpsList[0];
+  for (const f of fpsList) {
+    if (!fpsEquals(f, fps)) {
+      const labels = [...new Set(inputs.map((i) => i.fps))].join(", ");
+      throw new Error(`buildFcpxml: mixed fps not supported (got ${labels})`);
+    }
   }
-  const rawFps = transcripts[0].fps;
-  const { fps } = ensureIntegerFps(rawFps);
 
   const width = options.width ?? 1920;
   const height = options.height ?? 1080;
   const projectName = options.projectName ?? "FCPTeloper";
-  const formatName = options.formatName ?? `FFVideoFormat${height}p${fps}`;
+  const formatName = options.formatName ?? defaultFormatName(height, fps);
 
-  const sorted = sortTranscripts(transcripts);
+  const sorted = sortBuildInputs(inputs);
 
-  // 各動画に asset id を振る。重複 source_video は明示エラー。
+  // 各動画に asset id を振る。重複 videoPath は明示エラー。
   const assetIds = new Map<string, string>();
-  for (const t of sorted) {
-    if (assetIds.has(t.source_video)) {
+  for (const i of sorted) {
+    if (assetIds.has(i.videoPath)) {
       throw new Error(
-        `buildFcpxml: duplicate source_video not allowed (${t.source_video})`,
+        `buildFcpxml: duplicate videoPath not allowed (${i.videoPath})`,
       );
     }
-    assetIds.set(t.source_video, `r_asset_${assetIds.size + 1}`);
+    assetIds.set(i.videoPath, `r_asset_${assetIds.size + 1}`);
   }
 
-  // spine: 各 use:true セグメントを順次連結し、累積 offset を計算
+  // spine: 1 動画 = 1 <asset-clip> をフル尺で連結。
+  // use:true セグメントは lane=1 の <title> として asset-clip 配下に重ねる。
   let cursorFrames = 0;
   const spineParts: string[] = [];
+  let styleDefEmitted = false;
 
-  for (const t of sorted) {
-    const assetId = assetIds.get(t.source_video)!;
-    const used = t.segments.filter((s) => s.use);
-    for (const seg of used) {
-      const startF = secondsToFrames(seg.start, fps);
-      const endF = secondsToFrames(seg.end, fps);
-      const durF = endF - startF;
-      if (durF <= 0) {
-        // 0 長 or 逆転は skip して警告
-        process.stderr.write(
-          `[fcpxml_write] skipping zero-length segment id=${seg.id} in ${t.source_video}\n`,
-        );
-        continue;
-      }
-      spineParts.push(
-        renderAssetClip({
-          assetId,
-          name: assetClipName(t, seg),
-          offsetFrames: cursorFrames,
-          startFrames: startF,
-          durationFrames: durF,
-          fps,
-          telop: telopText(seg),
-        }),
+  for (const item of sorted) {
+    const assetId = assetIds.get(item.videoPath)!;
+    const clipDurF = secondsToFrames(item.videoDurationSec, fps);
+    if (clipDurF <= 0) {
+      process.stderr.write(
+        `[fcpxml_write] skipping zero-length video ${item.videoPath}\n`,
       );
-      cursorFrames += durF;
+      continue;
     }
+
+    // この動画に対するテロップを構築 (transcript があり、use:true セグメントがあるなら)
+    const titles: string[] = [];
+    if (item.transcript) {
+      for (const seg of item.transcript.segments) {
+        if (!seg.use) continue;
+        const segStartF = secondsToFrames(seg.start, fps);
+        const segEndF = secondsToFrames(seg.end, fps);
+        const segDurF = segEndF - segStartF;
+        if (segDurF <= 0) {
+          process.stderr.write(
+            `[fcpxml_write] skipping zero-length segment id=${seg.id} in ${item.videoPath}\n`,
+          );
+          continue;
+        }
+        // <title> の offset は親 <asset-clip> の時間軸 (= シーケンス絶対時間) に乗せる。
+        // 親 asset-clip の offset が cursorFrames、start=0 なので、
+        // セグメントの先頭は cursorFrames + segStartF (sequence の絶対位置) になる。
+        const titleOffsetF = cursorFrames + segStartF;
+        titles.push(
+          renderTitle({
+            offset: framesToFcpTimeRational(titleOffsetF, fps),
+            duration: framesToFcpTimeRational(segDurF, fps),
+            telop: telopText(seg),
+            includeStyleDef: !styleDefEmitted,
+          }),
+        );
+        styleDefEmitted = true;
+      }
+    }
+
+    spineParts.push(
+      renderAssetClip({
+        assetId,
+        name: assetClipBaseName(item),
+        offsetFrames: cursorFrames,
+        durationFrames: clipDurF,
+        fps,
+        titles,
+      }),
+    );
+    cursorFrames += clipDurF;
   }
 
   const sequenceDuration = framesToFcpTime(cursorFrames, fps);
 
   const resourceParts: string[] = [];
-  for (const t of sorted) {
-    const id = assetIds.get(t.source_video)!;
-    const durF = secondsToFrames(t.video_duration_sec, fps);
+  for (const item of sorted) {
+    const id = assetIds.get(item.videoPath)!;
+    const durF = secondsToFrames(item.videoDurationSec, fps);
     resourceParts.push(
       renderAsset({
         id,
-        name: assetClipBaseName(t),
-        src: t.source_video,
+        name: assetClipBaseName(item),
+        src: item.videoPath,
         durationFrames: durF,
         fps,
       }),
@@ -130,7 +292,7 @@ export function buildFcpxml(
 
   return fillTemplate(TEMPLATE, {
     FORMAT_NAME: xmlEscape(formatName),
-    FRAME_DURATION: `1/${fps}s`,
+    FRAME_DURATION: frameDurationString(fps),
     WIDTH: String(width),
     HEIGHT: String(height),
     PROJECT_NAME: xmlEscape(projectName),
@@ -141,15 +303,52 @@ export function buildFcpxml(
   });
 }
 
-/* ------------------------------ helpers ------------------------------ */
-
-function assetClipBaseName(t: Transcript): string {
-  const parts = t.source_video.split("/");
-  return parts[parts.length - 1] ?? t.source_video;
+/**
+ * 後方互換: Transcript[] を旧シグネチャで受け取って BuildFcpxmlInput[] に変換するヘルパー。
+ * 既存テストや CLI のために残置。
+ */
+export function buildFcpxmlFromTranscripts(
+  transcripts: Transcript[],
+  options: BuildFcpxmlOptions = {},
+): string {
+  const inputs: BuildFcpxmlInput[] = transcripts.map((t) => ({
+    videoPath: t.source_video,
+    videoDurationSec: t.video_duration_sec,
+    fps: t.fps,
+    recordedAt: t.recorded_at,
+    transcript: t,
+  }));
+  return buildFcpxml(inputs, options);
 }
 
-function assetClipName(t: Transcript, seg: Segment): string {
-  return `${assetClipBaseName(t)} #${seg.id}`;
+/* ------------------------------ helpers ------------------------------ */
+
+/**
+ * BuildFcpxmlInput[] を recorded_at 昇順 (フォールバックは videoPath の basename) で並べる。
+ * sort.ts の比較ロジックを再利用するために、SortKey 互換のオブジェクトを組み立てて渡す。
+ */
+function sortBuildInputs(items: BuildFcpxmlInput[]): BuildFcpxmlInput[] {
+  return [...items].sort((a, b) => {
+    const da = parseIso8601(a.recordedAt);
+    const db = parseIso8601(b.recordedAt);
+    return compareSortKey(
+      {
+        hasTime: da !== null,
+        time: da?.getTime() ?? 0,
+        fallbackName: basename(a.videoPath),
+      },
+      {
+        hasTime: db !== null,
+        time: db?.getTime() ?? 0,
+        fallbackName: basename(b.videoPath),
+      },
+    );
+  });
+}
+
+function assetClipBaseName(item: BuildFcpxmlInput): string {
+  const parts = item.videoPath.split("/");
+  return parts[parts.length - 1] ?? item.videoPath;
 }
 
 function telopText(seg: Segment): string {
@@ -163,14 +362,20 @@ function telopText(seg: Segment): string {
 }
 
 /**
- * フレーム数を FCPXML の時間表記 "N/fps s" に変換する。
+ * フレーム数を FCPXML の時間表記に変換する。
  *
- * 例: 90 frames @ 30fps → "90/30s"
+ * 整数 fps:  例 90 @ 30fps → "90/30s"
+ * NTSC fps:  例 60 @ 59.94fps → "60060/60000s"
  * 0 frames は特別扱いで "0s" (FCP の慣習に合わせる)。
+ *
+ * 後方互換のため `fps` に `number` を渡された場合は整数 fps として扱う。
  */
-export function framesToFcpTime(frames: number, fps: number): string {
-  if (frames === 0) return "0s";
-  return `${frames}/${fps}s`;
+export function framesToFcpTime(
+  frames: number,
+  fps: number | FpsRational,
+): string {
+  const r: FpsRational = typeof fps === "number" ? { num: fps, den: 1 } : fps;
+  return framesToFcpTimeRational(frames, r);
 }
 
 interface AssetParams {
@@ -178,7 +383,7 @@ interface AssetParams {
   name: string;
   src: string;
   durationFrames: number;
-  fps: number;
+  fps: FpsRational;
 }
 
 function renderAsset(p: AssetParams): string {
@@ -188,31 +393,38 @@ function renderAsset(p: AssetParams): string {
     );
   }
   const fileUrl = pathToFileUrl(p.src);
-  const dur = framesToFcpTime(p.durationFrames, p.fps);
-  // `<asset>` の format 属性は省略する (M-1 対応)。シーケンス側のみ format を持つ。
-  return (
-    `<asset id="${p.id}" name="${xmlEscape(p.name)}" src="${xmlEscape(fileUrl)}" ` +
-    `start="0s" duration="${dur}" hasVideo="1" hasAudio="1"/>`
-  );
+  const dur = framesToFcpTimeRational(p.durationFrames, p.fps);
+  // FCPXML DTD: <asset> の src は子要素 <media-rep> に持たせる必要がある。
+  // FCP が「対応するメディアがない不正な編集」を出さないよう、シーケンスと同じ
+  // format ID をひも付けて素材のフォーマットを明示する。
+  // audioSources/audioChannels/audioRate は実機エクスポートに準じた既定値。
+  return [
+    `<asset id="${p.id}" name="${xmlEscape(p.name)}" start="0s" duration="${dur}" format="r0" hasVideo="1" hasAudio="1" videoSources="1" audioSources="1" audioChannels="2" audioRate="48000">`,
+    `      <media-rep kind="original-media" src="${xmlEscape(fileUrl)}"/>`,
+    `    </asset>`,
+  ].join("\n");
 }
 
 interface AssetClipParams {
   assetId: string;
   name: string;
   offsetFrames: number;
-  startFrames: number;
   durationFrames: number;
-  fps: number;
-  telop: string;
+  fps: FpsRational;
+  /** この <asset-clip> 配下に乗せる <title> 文字列 (0 件可) */
+  titles: string[];
 }
 
 function renderAssetClip(p: AssetClipParams): string {
-  const offset = framesToFcpTime(p.offsetFrames, p.fps);
-  const start = framesToFcpTime(p.startFrames, p.fps);
-  const dur = framesToFcpTime(p.durationFrames, p.fps);
+  const offset = framesToFcpTimeRational(p.offsetFrames, p.fps);
+  const dur = framesToFcpTimeRational(p.durationFrames, p.fps);
+  // start="0s" 固定: 動画はフル尺で配置するため、ブレード分割は発生しない。
+  const titlesBlock =
+    p.titles.length > 0
+      ? "\n              " + p.titles.join("\n              ")
+      : "";
   return [
-    `<asset-clip ref="${p.assetId}" name="${xmlEscape(p.name)}" offset="${offset}" start="${start}" duration="${dur}">`,
-    `              ${renderTitle({ offset, duration: dur, telop: p.telop })}`,
+    `<asset-clip ref="${p.assetId}" name="${xmlEscape(p.name)}" offset="${offset}" start="0s" duration="${dur}">${titlesBlock}`,
     `            </asset-clip>`,
   ].join("\n");
 }
@@ -221,15 +433,32 @@ interface TitleParams {
   offset: string;
   duration: string;
   telop: string;
+  /** 最初の title のみ <text-style-def> を内側で定義する (FCPXML DTD 適合) */
+  includeStyleDef: boolean;
 }
 
 function renderTitle(p: TitleParams): string {
-  // <text-style-def> は <resources> 配下に 1 回だけ定義し、ここでは ref のみ
+  // FCPXML DTD `(param* , text* , text-style-def* , ...)` の順序に従い
+  // <param> → <text> → <text-style-def> の順で出力する。
+  // <text-style-def> は <resources> 直下に置けないため、最初の <title> 内で 1 度だけ定義。
+  const paramsBlock = TITLE_PARAMS.map(
+    (pp) =>
+      `                <param name="${xmlEscape(pp.name)}" key="${xmlEscape(pp.key)}" value="${xmlEscape(pp.value)}"/>`,
+  ).join("\n");
+  const styleDefBlock = p.includeStyleDef
+    ? "\n" +
+      [
+        `                <text-style-def id="${STYLE_ID}">`,
+        `                  ${renderTextStyleTag()}`,
+        `                </text-style-def>`,
+      ].join("\n")
+    : "";
   return [
     `<title ref="r_title" lane="1" offset="${p.offset}" duration="${p.duration}" name="Telop">`,
+    paramsBlock,
     `                <text>`,
     `                  <text-style ref="${STYLE_ID}">${xmlEscape(p.telop)}</text-style>`,
-    `                </text>`,
+    `                </text>${styleDefBlock}`,
     `              </title>`,
   ].join("\n");
 }
@@ -270,23 +499,22 @@ export function pathToFileUrl(absPath: string): string {
  * FCPXML テンプレート。プレースホルダは `{NAME}` 形式 (`[A-Z_]+`)。
  * 内容変更時は tests/samples/sample01.expected.fcpxml の再生成が必要。
  *
- * <resources> 配下:
+ * <resources> 配下 (DTD: asset | effect | format | media | locator のみ):
  *   - <format>: シーケンス用 1 つ
  *   - <effect>: Basic Title 1 つ
- *   - <text-style-def>: テロップ固定スタイル (仕様書 §8.4) を 1 回だけ定義
- *   - {RESOURCES}: 各動画の <asset>
+ *   - {RESOURCES}: 各動画の <asset> (中に <media-rep> を持つ)
+ *
+ * <text-style-def> は DTD 上 <resources> 配下に置けないため、最初の <title> 内で
+ * 1 度だけ定義し、以降の <title> は <text-style ref="..."> で参照する。
  */
 const TEMPLATE = `<?xml version="1.0" encoding="UTF-8"?>
 <fcpxml version="1.11">
   <resources>
-    <format id="r0" name="{FORMAT_NAME}" frameDuration="{FRAME_DURATION}" width="{WIDTH}" height="{HEIGHT}" colorSpace="1-1-1 (Rec. 709)"/>
-    <effect id="r_title" name="Basic Title" uid=".../Titles.localized/Build In_Out.localized/Basic Title.localized/Basic Title.moti"/>
-    <text-style-def id="{STYLE_ID}">
-      <text-style font="Hiragino Sans W6" fontSize="60" fontColor="1 1 1 1" strokeColor="0 0 0 1" strokeWidth="4"/>
-    </text-style-def>
+    <format id="r0" name="{FORMAT_NAME}" frameDuration="{FRAME_DURATION}" width="{WIDTH}" height="{HEIGHT}" colorSpace="9-18-9 (Rec. 2020 HLG)"/>
+    <effect id="r_title" name="基本タイトル" uid=".../Titles.localized/Bumper:Opener.localized/Basic Title.localized/Basic Title.moti"/>
     {RESOURCES}
   </resources>
-  <library>
+  <library colorProcessing="wide-hdr">
     <event name="{PROJECT_NAME}">
       <project name="{PROJECT_NAME}">
         <sequence format="r0" duration="{SEQUENCE_DURATION}" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">

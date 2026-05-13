@@ -70,12 +70,12 @@ export default function App() {
 
   // Player 制御
   const playerRef = useRef<HTMLVideoElement | null>(null);
-  // 編集の debounce 保存 (タイマー + 未保存 payload)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSaveRef = useRef<{
-    transcriptPath: string;
-    transcript: Transcript;
-  } | null>(null);
+  /** 編集された未保存の transcript (明示保存ボタンで永続化する) */
+  const [dirtyTranscript, setDirtyTranscript] = useState<Transcript | null>(
+    null,
+  );
+  /** dirtyTranscript の保存先パス (selectedVideo と紐付ける) */
+  const dirtyPathRef = useRef<string | null>(null);
 
   /**
    * 初回マウント時のみ走らせる初期化処理。
@@ -148,27 +148,70 @@ export default function App() {
   }, [currentFolder, openFolder]);
 
   /**
-   * 保留中の transcript 保存があれば即時 flush する。
-   * 動画切替・FCPXML 出力・アンマウント前に呼び、後勝ちレースと debounce leak を防ぐ。
+   * 未保存の transcript (`dirtyTranscript`) を明示保存する。
+   * 「保存」ボタンや「保存して切替」のフローから呼ぶ。
    */
-  const flushPendingSave = useCallback(async (): Promise<void> => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    const pending = pendingSaveRef.current;
-    if (!pending) return;
-    pendingSaveRef.current = null;
+  const saveDirty = useCallback(async (): Promise<boolean> => {
+    const dirty = dirtyTranscript;
+    const path = dirtyPathRef.current;
+    if (!dirty || !path) return true;
     try {
-      await window.fcpteloper.writeTranscript(pending);
+      await window.fcpteloper.writeTranscript({
+        transcriptPath: path,
+        transcript: dirty,
+      });
+      setDirtyTranscript(null);
+      dirtyPathRef.current = null;
+      return true;
     } catch (err) {
       notify(`保存失敗: ${(err as Error).message}`, "error");
+      return false;
     }
-  }, [notify]);
+  }, [dirtyTranscript, notify]);
+
+  /** 未保存変更を破棄する */
+  const discardDirty = useCallback(() => {
+    setDirtyTranscript(null);
+    dirtyPathRef.current = null;
+  }, []);
+
+  /** Cmd+S / Ctrl+S で transcript を保存 */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        if (dirtyTranscript) void saveDirty();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [dirtyTranscript, saveDirty]);
+
+  /**
+   * 動画切替時、未保存があれば確認 (window.confirm)。
+   * - OK = 破棄して切替
+   * - キャンセル = 切替中止
+   * 保存したい場合は事前に「保存」ボタンを押してから切り替える運用。
+   */
+  const confirmSelectVideo = useCallback(
+    (next: VideoEntry) => {
+      if (dirtyTranscript) {
+        const ok = window.confirm(
+          "未保存の変更があります。破棄して別の動画に切り替えますか?",
+        );
+        if (!ok) return;
+      }
+      setSelectedVideo(next);
+    },
+    [dirtyTranscript],
+  );
 
   /** 選択動画の transcript を読み込む (存在すれば) */
   useEffect(() => {
     setTranscript(null);
+    // 別動画に切り替わった = 未保存編集も別物の扱い。表示上はクリア。
+    // 「保存しますか?」のガードは別ハンドラで前段に挟む。
+    discardDirty();
     if (!selectedVideo) return;
     if (!selectedVideo.hasTranscript) return;
     let cancelled = false;
@@ -190,26 +233,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedVideo, notify]);
-
-  /** selectedVideo 変更時、保留中の保存を即 flush する */
-  useEffect(() => {
-    return () => {
-      // クリーンアップで呼ばれる = 前の selectedVideo が抜けた瞬間。
-      // ここで flush することで、新動画ロード前に旧データを書き切る。
-      void flushPendingSave();
-    };
-  }, [selectedVideo, flushPendingSave]);
-
-  /** アンマウント時のタイマー leak 防止 */
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-    };
-  }, []);
+  }, [selectedVideo, notify, discardDirty]);
 
   /** チェック状態の更新 */
   const handleToggleVideo = useCallback((videoPath: string) => {
@@ -305,15 +329,31 @@ export default function App() {
 
   /** FCPXML 出力 */
   const handleBuildFcpxml = useCallback(async () => {
-    // 編集中の保留分を確定させてから FCPXML を組む
-    await flushPendingSave();
-    const paths = videos
-      .filter((v) => v.hasTranscript)
-      .map((v) => v.transcriptPath);
-    if (paths.length === 0) {
-      notify("transcript が一つもありません", "error");
+    // 未保存編集がある場合は確認 (FCPXML は保存済み JSON を読むため、未保存分は反映されない)
+    if (dirtyTranscript) {
+      const ok = window.confirm(
+        "未保存の変更があります。先に保存してから FCPXML 出力しますか?\n" +
+          "OK = 保存して続行 / キャンセル = 未保存分を無視して出力",
+      );
+      if (ok) {
+        const saved = await saveDirty();
+        if (!saved) return;
+      }
+    }
+    // チェック ON の動画を全て対象にする (transcript の有無は問わない)。
+    // transcript がある動画はテロップを重ね、無い動画は素の動画クリップとして並べる。
+    const targets = videos.filter((v) => checkedVideos.has(v.videoPath));
+    if (targets.length === 0) {
+      notify(
+        "チェックされた動画がありません (動画一覧でチェックを入れてください)",
+        "error",
+      );
       return;
     }
+    const items = targets.map((v) => ({
+      videoPath: v.videoPath,
+      transcriptPath: v.hasTranscript ? v.transcriptPath : undefined,
+    }));
     const defaultName = currentFolder
       ? `${currentFolder.split("/").pop() ?? "fcpteloper"}.fcpxml`
       : "fcpteloper.fcpxml";
@@ -324,39 +364,60 @@ export default function App() {
     if (!out) return;
     try {
       const r = await window.fcpteloper.buildFcpxml({
-        transcriptPaths: paths,
+        items,
         outputPath: out,
       });
       notify(`FCPXML を書き出しました: ${r.outputPath}`);
     } catch (err) {
       notify(`FCPXML 生成失敗: ${(err as Error).message}`, "error");
     }
-  }, [videos, currentFolder, notify, flushPendingSave]);
+  }, [videos, checkedVideos, currentFolder, notify, dirtyTranscript, saveDirty]);
 
-  /** transcript 編集 (use / telop_text) を debounce で保存 */
+  /**
+   * transcript 編集 (use / telop_text) を未保存バッファに積むだけ。
+   * 永続化は明示的に「保存」ボタンを押したときのみ行う。
+   */
   const handleTranscriptChange = useCallback(
     (next: Transcript) => {
       setTranscript(next);
       if (!selectedVideo) return;
-      // 未保存 payload を ref に積んでおき、selectedVideo 切替時に flush できるようにする
-      pendingSaveRef.current = {
-        transcriptPath: selectedVideo.transcriptPath,
-        transcript: next,
-      };
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        void flushPendingSave();
-      }, 500);
+      setDirtyTranscript(next);
+      dirtyPathRef.current = selectedVideo.transcriptPath;
     },
-    [selectedVideo, flushPendingSave],
+    [selectedVideo],
   );
 
-  /** セグメントクリックで該当時刻にシーク */
+  /**
+   * セグメントクリックで該当時刻にシークして再生する。
+   *
+   * 注意:
+   *   - metadata が未ロード (`readyState < HAVE_METADATA`) のままだと `currentTime` 設定が無視される
+   *   - `currentTime` 設定直後に `play()` を呼ぶと seek を待たずに再生が始まり、シーク失敗扱いになることがある
+   *   ので、`loadedmetadata` と `seeked` を待ち合わせてから再生する
+   */
   const handleSeek = useCallback((seconds: number) => {
     const v = playerRef.current;
     if (!v) return;
-    v.currentTime = seconds;
-    void v.play().catch(() => undefined);
+    const doSeek = () => {
+      const onSeeked = () => {
+        v.removeEventListener("seeked", onSeeked);
+        void v.play().catch(() => undefined);
+      };
+      v.addEventListener("seeked", onSeeked);
+      v.currentTime = seconds;
+    };
+    // HAVE_METADATA = 1。これ未満だと currentTime 代入が反映されない
+    if (v.readyState >= 1) {
+      doSeek();
+    } else {
+      const onLoaded = () => {
+        v.removeEventListener("loadedmetadata", onLoaded);
+        doSeek();
+      };
+      v.addEventListener("loadedmetadata", onLoaded);
+      // ロードを促す
+      v.load();
+    }
   }, []);
 
   const canTranscribe = !queueRunning && checkedVideos.size > 0;
@@ -364,8 +425,9 @@ export default function App() {
     ? `文字起こし中… (${transcribingVideo ? transcribingVideo.split("/").pop() : ""})`
     : `文字起こし (${checkedVideos.size})`;
   const canBuildFcpxml = useMemo(
-    () => videos.some((v) => v.hasTranscript),
-    [videos],
+    // チェック済みの動画が 1 件でもあれば出力可能 (transcript 有無は問わない)
+    () => videos.some((v) => checkedVideos.has(v.videoPath)),
+    [videos, checkedVideos],
   );
 
   return (
@@ -450,7 +512,7 @@ export default function App() {
           <VideoList
             videos={videos}
             selected={selectedVideo}
-            onSelect={setSelectedVideo}
+            onSelect={confirmSelectVideo}
             checked={checkedVideos}
             onToggle={handleToggleVideo}
             onToggleAll={handleToggleAll}
@@ -478,6 +540,44 @@ export default function App() {
               videoPath={selectedVideo?.videoPath ?? null}
             />
           </Box>
+          {transcript && (
+            <Box
+              sx={{
+                borderBottom: 1,
+                borderColor: "divider",
+                background: dirtyTranscript ? "warning.lighter" : "grey.50",
+                px: 1.5,
+                py: 0.75,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                flexShrink: 0,
+              }}
+            >
+              <Typography variant="caption" sx={{ flex: 1 }}>
+                {dirtyTranscript
+                  ? "未保存の変更があります"
+                  : "保存済み"}
+              </Typography>
+              <Button
+                size="small"
+                variant="text"
+                onClick={discardDirty}
+                disabled={!dirtyTranscript}
+              >
+                破棄
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={() => void saveDirty()}
+                disabled={!dirtyTranscript}
+              >
+                保存
+              </Button>
+            </Box>
+          )}
           <Box sx={{ flex: 1, overflow: "auto" }}>
             {transcript ? (
               <SegmentList

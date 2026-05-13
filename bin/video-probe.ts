@@ -10,17 +10,19 @@
  *   {
  *     "source_video": "<abs>",
  *     "recorded_at": <ISO8601 or null>,
- *     "fps": <int>,
- *     "raw_fps": <float>,
+ *     "fps": <float>,           // ffprobe 由来の数値そのまま
+ *     "raw_fps": <float>,        // 互換のため残置 (fps と同値)
+ *     "fps_num": <int>,          // 正規化後の分子 (例: 60000)
+ *     "fps_den": <int>,          // 正規化後の分母 (例: 1001)
  *     "video_duration_sec": <number>
  *   }
  *
- * fps が非整数 (29.97 / 59.94 等) の場合は exit 1。stderr に "non-integer fps" を含む。
+ * サポート外 fps (例: 23.976) の場合は exit 1。stderr に "unsupported fps" を含む。
  */
 
 import { resolve } from "node:path";
 import { probeVideo } from "../src/main/ffprobe.js";
-import { ensureIntegerFps } from "../src/main/fps.js";
+import { normalizeFps } from "../src/main/fps.js";
 import { logger } from "../src/main/log.js";
 
 function printUsage(code: number): never {
@@ -43,13 +45,13 @@ function main(): void {
     process.exit(1);
   }
 
-  let fpsInt: number;
+  let fpsRational;
   try {
-    fpsInt = ensureIntegerFps(probed.fps).fps;
+    fpsRational = normalizeFps(probed.fps);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     process.stderr.write(`[video-probe] ${msg}\n`);
-    logger.warn("video-probe", "non_integer_fps", {
+    logger.warn("video-probe", "unsupported_fps", {
       path,
       fps: probed.fps,
     });
@@ -59,12 +61,18 @@ function main(): void {
   const result = {
     source_video: probed.source_video,
     recorded_at: probed.creation_time,
-    fps: fpsInt,
+    fps: probed.fps,
     raw_fps: probed.fps,
+    fps_num: fpsRational.num,
+    fps_den: fpsRational.den,
     video_duration_sec: probed.video_duration_sec,
   };
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  logger.info("video-probe", "ok", { path, fps: fpsInt });
+  logger.info("video-probe", "ok", {
+    path,
+    fps_num: fpsRational.num,
+    fps_den: fpsRational.den,
+  });
 }
 
 main();

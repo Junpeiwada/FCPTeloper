@@ -12,10 +12,13 @@ import {
   Box,
   Checkbox,
   Chip,
+  IconButton,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import PersonIcon from "@mui/icons-material/Person";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 
 import type { Segment, Transcript } from "../../shared/transcript-schema.js";
 
@@ -64,20 +67,31 @@ export default function SegmentList({ transcript, onSeek, onChange }: Props) {
             onChange={(e) => updateSegment(seg.id, { use: e.target.checked })}
             sx={{ p: 0.5, mt: 0.25 }}
           />
-          <Box sx={{ minWidth: 92, mt: 0.5 }}>
-            <Typography
-              variant="caption"
-              sx={{
-                cursor: "pointer",
-                color: "primary.main",
-                fontFamily: "Menlo, monospace",
-                fontSize: 11,
-                "&:hover": { textDecoration: "underline" },
-              }}
-              onClick={() => onSeek(seg.start)}
-            >
-              {formatTime(seg.start)} - {formatTime(seg.end)}
-            </Typography>
+          <Box sx={{ minWidth: 110, mt: 0.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+              <Tooltip title="この時刻から再生">
+                <IconButton
+                  size="small"
+                  onClick={() => onSeek(seg.start)}
+                  sx={{ p: 0.25 }}
+                >
+                  <PlayArrowIcon fontSize="small" color="primary" />
+                </IconButton>
+              </Tooltip>
+              <Typography
+                variant="caption"
+                sx={{
+                  cursor: "pointer",
+                  color: "primary.main",
+                  fontFamily: "Menlo, monospace",
+                  fontSize: 11,
+                  "&:hover": { textDecoration: "underline" },
+                }}
+                onClick={() => onSeek(seg.start)}
+              >
+                {formatTime(seg.start)} - {formatTime(seg.end)}
+              </Typography>
+            </Box>
             <Box sx={{ display: "flex", gap: 0.5, mt: 0.25, flexWrap: "wrap" }}>
               {seg.language && (
                 <Chip
