@@ -54,11 +54,6 @@ const createWindow = () => {
     );
   }
 
-  // 開発時のみ DevTools を自動オープン (メインウィンドウ内に dock)
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
-
   // F12 で DevTools をトグル (本番ビルドでも有効、メインウィンドウ内に dock)
   mainWindow.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;

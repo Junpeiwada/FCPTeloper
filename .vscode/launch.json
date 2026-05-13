@@ -2,11 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Electron: npm start",
+      "name": "Electron: Start",
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron-forge",
       "runtimeArgs": ["start"],
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],

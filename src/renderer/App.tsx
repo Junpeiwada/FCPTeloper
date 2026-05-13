@@ -275,6 +275,17 @@ export default function App() {
       try {
         await window.fcpteloper.startTranscribe({ videoPath: v.videoPath });
         ok++;
+        // 1本完了したら即時リスト更新
+        if (currentFolder) {
+          const list = await window.fcpteloper.listVideos(currentFolder);
+          setVideos(list);
+          if (selectedVideo) {
+            const updated = list.find(
+              (x) => x.videoPath === selectedVideo.videoPath,
+            );
+            if (updated) setSelectedVideo(updated);
+          }
+        }
       } catch (err) {
         const name = v.videoPath.split("/").pop() ?? v.videoPath;
         failed.push(name);
