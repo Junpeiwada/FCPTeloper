@@ -243,11 +243,12 @@ export function buildFcpxml(
       for (const seg of item.transcript.segments) {
         if (!seg.use) continue;
         const segStartF = secondsToFrames(seg.start, fps);
-        const segEndF = secondsToFrames(seg.end, fps);
+        // seg.end が動画長を超えるケースはクリップ境界でクランプ (Whisper 誤検出等の対処)
+        const segEndF = Math.min(secondsToFrames(seg.end, fps), clipDurF);
         const segDurF = segEndF - segStartF;
         if (segDurF <= 0) {
           process.stderr.write(
-            `[fcpxml_write] skipping zero-length segment id=${seg.id} in ${item.videoPath}\n`,
+            `[fcpxml_write] skipping zero-length or overflow segment id=${seg.id} in ${item.videoPath}\n`,
           );
           continue;
         }

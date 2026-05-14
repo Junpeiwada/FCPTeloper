@@ -203,6 +203,30 @@ describe("buildFcpxml", () => {
     expect((xml.match(/<asset /g) ?? []).length).toBe(1);
   });
 
+  it("seg.end が video_duration_sec を超えるセグメントはクリップ境界でクランプされる", () => {
+    const t = loadSample();
+    // duration を短くして末尾セグメントがはみ出すようにする
+    t.video_duration_sec = 1.5;
+    t.segments = [
+      { ...t.segments[0], id: 0, start: 0, end: 1.0, use: true },
+      { ...t.segments[0], id: 1, start: 1.0, end: 3.0, use: true }, // overflows
+    ];
+    // 例外なく生成され、asset-clip は 1 つ、title は 2 つ (clamp された状態)
+    const xml = buildFcpxmlFromTranscripts([t]);
+    expect((xml.match(/<asset-clip /g) ?? []).length).toBe(1);
+    expect((xml.match(/<title /g) ?? []).length).toBe(2);
+  });
+
+  it("seg.start がクリップ外 (video_duration_sec 以降) のセグメントは出力されない", () => {
+    const t = loadSample();
+    t.video_duration_sec = 1.0;
+    t.segments = [
+      { ...t.segments[0], id: 0, start: 1.5, end: 2.5, use: true }, // completely outside
+    ];
+    const xml = buildFcpxmlFromTranscripts([t]);
+    expect((xml.match(/<title /g) ?? []).length).toBe(0);
+  });
+
   it("telop に改行が含まれていてもスペースに正規化される (M-7)", () => {
     const t = loadSample();
     t.segments = [
